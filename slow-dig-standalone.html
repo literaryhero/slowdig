@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Slow Dig</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: light; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+
+/* Layout: a top-down plot of ground you click to dig, with the vertical cross-section as a sidebar; stacks on phones. */
+:root {
+  --bg: #e6eae5;
+  --card: #f3f5f1;
+  --fg: #1b221d;
+  --muted: #586259;
+  --line: #c3cac2;
+  --accent: #f5c518;
+  --on-accent: #1b1708;
+  --danger: #a3321f;
+  --sky: #cadbe6;
+  --ink: #2a2f2b;
+  --ground: #2d2118;
+  --s-top: #5a3f2a;
+  --s-sub: #7b5938;
+  --s-clay: #9c6b4b;
+  --s-gravel: #837c70;
+  --s-sand: #b39a70;
+  --s-granite: #6e747c;
+  --hole: #17110d;
+  --on-soil: #f4ede1;
+  --speck-lt: #f4ede1;
+  --speck-dk: #1a120b;
+  --grass: #6d8548;
+  --blade-lt: #8fa766;
+  --blade-dk: #51673a;
+  --wood: #a07a4b;
+  --metal: #aeb7bc;
+  --s-lowcrust: #4d5560;
+  --s-mantle: #5b6b3a;
+  --s-trans: #8f5a35;
+  --s-lowmantle: #a8402a;
+  --s-outer: #e8791b;
+  --s-inner: #ffd75a;
+  --f-display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101411; --card: #181d19; --fg: #e8ede7; --muted: #9aa49b; --line: #2b332d;
+    --danger: #ff8b78; --sky: #18232d; --ink: #aeb8b0; --ground: #0d0a07;
+    --s-top: #43301f; --s-sub: #5e432b; --s-clay: #76523a; --s-gravel: #645f56; --s-sand: #8c7853; --s-granite: #515760;
+    --hole: #0a0705; --grass: #2e3b26; --blade-lt: #425336; --blade-dk: #212b1b; --wood: #7d5e39; --metal: #8a949a;
+    --s-lowcrust: #3a4048; --s-mantle: #46532d; --s-trans: #6f4527; --s-lowmantle: #85301f; --s-outer: #d56a12; --s-inner: #e9bd3d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101411; --card: #181d19; --fg: #e8ede7; --muted: #9aa49b; --line: #2b332d;
+  --danger: #ff8b78; --sky: #18232d; --ink: #aeb8b0; --ground: #0d0a07;
+  --s-top: #43301f; --s-sub: #5e432b; --s-clay: #76523a; --s-gravel: #645f56; --s-sand: #8c7853; --s-granite: #515760;
+  --hole: #0a0705; --grass: #2e3b26; --blade-lt: #425336; --blade-dk: #212b1b; --wood: #7d5e39; --metal: #8a949a;
+  --s-lowcrust: #3a4048; --s-mantle: #46532d; --s-trans: #6f4527; --s-lowmantle: #85301f; --s-outer: #d56a12; --s-inner: #e9bd3d;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 28px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h1 {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(2.2rem, 7vw, 3.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+.sub { margin: 10px 0 0; color: var(--muted); max-width: 56ch; }
+.k {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.stage { margin: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: var(--card); }
+.stage canvas { display: block; width: 100%; aspect-ratio: 4 / 3; touch-action: manipulation; cursor: crosshair; }
+@media (hover: hover) { .stage canvas { cursor: none; } }
+.stage canvas:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+.status { margin: 0; min-height: 1.6em; font-family: var(--f-mono); font-size: 13px; color: var(--muted); }
+.status.hit { color: var(--fg); }
+.status.hit span { box-shadow: inset 0 -0.5em 0 color-mix(in srgb, var(--accent) 60%, transparent); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.controls p { margin: 0; color: var(--muted); font-size: 13px; flex: 1 1 260px; min-width: 0; }
+
+button {
+  font: inherit; font-family: var(--f-mono); font-size: 12px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  border-radius: 3px; padding: 10px 14px; cursor: pointer;
+  border: 1px solid var(--fg); background: transparent; color: var(--fg);
+}
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+button.danger { border-color: var(--danger); color: var(--danger); }
+button:hover { filter: brightness(1.06); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+.read { display: flex; flex-wrap: wrap; gap: 16px 36px; align-items: flex-end; padding-top: 6px; border-top: 1px solid var(--line); }
+.depthblock { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.big {
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: clamp(2.4rem, 9vw, 3.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.big .u { font-size: 0.4em; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
+.muted { color: var(--muted); margin: 0; font-variant-numeric: tabular-nums; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px 20px; margin: 0; flex: 1 1 320px; min-width: 0; }
+.stats > div { min-width: 0; }
+.stats dt { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.stats dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.prof { margin: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: var(--card); }
+.prof canvas { display: block; width: 100%; height: clamp(420px, 68vh, 540px); }
+
+h2 { font-family: var(--f-display); font-size: 1.35rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+.finds { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.finds li { display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.finds .d { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.finds .n { font-weight: 600; }
+.finds .t { color: var(--muted); }
+.finds .w { grid-column: 2; font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.empty { color: var(--muted); margin: 0; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+
+.foot { display: flex; flex-direction: column; gap: 10px; color: var(--muted); font-size: 13px; align-items: flex-start; }
+.foot p { margin: 0; }
+.saves { width: 100%; font-size: 13px; }
+.saves summary { cursor: pointer; font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg); padding: 4px 0; }
+.saves summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.saves p { margin: 6px 0 4px; }
+.saves .row { display: flex; gap: 8px; margin: 4px 0 8px; }
+.saves input {
+  flex: 1 1 auto; min-width: 0; font: inherit; font-family: var(--f-mono); font-size: 12px;
+  padding: 8px 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 3px;
+}
+.saves input:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
+.saves .msg { min-height: 1.4em; color: var(--fg); }
+.saves .msg.bad { color: var(--danger); }
+.confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.confirm p { color: var(--fg); flex: 1 1 100%; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Slow Dig</h1>
+    <p class="sub">One patch of ground, one shovel. Every click lifts a real shovelful of earth, so the hole only gets as deep as you are willing to make it.</p>
+  </header>
+
+  <div class="grid">
+    <section class="main" aria-label="Dig site">
+      <figure class="stage">
+        <canvas id="top" tabindex="0" role="button" aria-label="Dig a shovelful of earth"></canvas>
+      </figure>
+      <p id="status" class="status"><span id="statusText">Click the ground to dig a shovelful.</span></p>
+
+      <div class="controls">
+        <button id="digBtn" class="primary" type="button">Dig a shovelful</button>
+        <p>A shovelful is about 4 litres. The pit is 1 m by 1 m, so each one takes off 4 mm. The centre of the Earth is 6,371 km down, roughly 1.6 billion shovelfuls away.</p>
+      </div>
+
+      <div class="read">
+        <div class="depthblock">
+          <p class="k">Depth</p>
+          <p class="big"><span id="depth">0.0</span><span class="u" id="depthUnit">cm</span></p>
+          <p id="depthSub" class="muted">0.000 m · Topsoil</p>
+        </div>
+        <dl class="stats">
+          <div><dt>Shovelfuls</dt><dd id="sShovels">0</dd></div>
+          <div><dt>Earth removed</dt><dd id="sSoil">0 L</dd></div>
+          <div><dt>Layer</dt><dd id="sLayer">Topsoil</dd></div>
+          <div><dt>Temperature</dt><dd id="sTemp">15 °C</dd></div>
+          <div><dt>Next find</dt><dd id="sFind">—</dd></div>
+          <div><dt>Next layer</dt><dd id="sNext">—</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <aside class="side" aria-label="Cross-section and finds">
+      <p class="k">Cross-section</p>
+      <figure class="prof">
+        <canvas id="prof" role="img" aria-label="Vertical cross-section of the hole"></canvas>
+      </figure>
+
+      <div>
+        <h2>Finds</h2>
+        <ol id="finds" class="finds" hidden></ol>
+        <p id="noFinds" class="empty">Nothing yet. Keep digging.</p>
+      </div>
+
+      <div class="foot">
+        <p id="saveNote"></p>
+        <details class="saves">
+          <summary>Save code</summary>
+          <p>Copy this code to move your hole to another browser or device, or keep it as a backup.</p>
+          <div class="row">
+            <input id="codeOut" type="text" readonly aria-label="Your save code">
+            <button id="copyBtn" type="button">Copy</button>
+          </div>
+          <p>To load a hole, paste a save code here.</p>
+          <div class="row">
+            <input id="codeIn" type="text" placeholder="slowdig:1:..." aria-label="Paste a save code" autocomplete="off" spellcheck="false">
+            <button id="loadBtn" type="button">Load</button>
+          </div>
+          <div id="loadConfirm" class="confirm" hidden>
+            <p id="loadConfirmText"></p>
+            <button id="loadYes" class="danger" type="button">Replace</button>
+            <button id="loadNo" type="button">Cancel</button>
+          </div>
+          <p id="codeMsg" class="msg" role="status"></p>
+        </details>
+        <div id="resetArea" hidden>
+          <button id="resetBtn" class="danger" type="button">Fill the hole in</button>
+          <div id="resetConfirm" class="confirm" hidden>
+            <p>This puts all the soil back and removes every find.</p>
+            <button id="resetYes" class="danger" type="button">Fill it in</button>
+            <button id="resetNo" type="button">Keep digging</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+(function () {
+  var MM_PER_SHOVEL = 4;           // 4 litres spread over a 1 m x 1 m pit
+  var LITRES_PER_SHOVEL = 4;
+  var DEPTH_MAX_CM = 637100000;    // the centre of the Earth, 6,371 km down
+  var REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var DIG_MS = REDUCED ? 450 : 1000;
+
+  var LAYERS = [
+    { n: 'Topsoil',   from: 0,   c: '--s-top' },
+    { n: 'Subsoil',   from: 30,  c: '--s-sub' },
+    { n: 'Clay',      from: 100, c: '--s-clay' },
+    { n: 'Gravel',    from: 250, c: '--s-gravel' },
+    { n: 'Sandstone', from: 450, c: '--s-sand' },
+    { n: 'Granite',   from: 800, c: '--s-granite' },
+    { n: 'Lower crust',     from: 1500000,   c: '--s-lowcrust' },
+    { n: 'Upper mantle',    from: 3500000,   c: '--s-mantle' },
+    { n: 'Transition zone', from: 41000000,  c: '--s-trans' },
+    { n: 'Lower mantle',    from: 66000000,  c: '--s-lowmantle', glow: true },
+    { n: 'Outer core',      from: 289100000, c: '--s-outer', glow: true },
+    { n: 'Inner core',      from: 515000000, c: '--s-inner', glow: true }
+  ];
+
+  var FINDS = [
+    { d: 3,    n: 'Bottle cap',      t: 'Crown cork, rusted through.' },
+    { d: 8,    n: 'Glass marble',    t: 'Green swirl, one chipped side.' },
+    { d: 14,   n: 'Iron nail',       t: 'Square cut and hand forged.' },
+    { d: 22,   n: 'Clay pipe stem',  t: 'White clay with bite marks near the end.' },
+    { d: 35,   n: 'Pottery shard',   t: 'Glazed rim with a thin blue line.' },
+    { d: 50,   n: 'Worn coin',       t: 'Too corroded to read either face.' },
+    { d: 70,   n: 'Small tooth',     t: 'Most likely a mole or a vole.' },
+    { d: 95,   n: 'Iron key',        t: 'Too heavy for a drawer lock.' },
+    { d: 130,  n: 'Animal bone',     t: 'Part of a rib, older than the key.' },
+    { d: 170,  n: 'Flint scraper',   t: 'Knapped along one edge, fits the thumb.' },
+    { d: 220,  n: 'Fossil shell',    t: 'A bivalve with the shell turned to calcite.' },
+    { d: 300,  n: 'Ammonite',        t: 'Palm sized and tightly coiled, sitting in gravel.' },
+    { d: 400,  n: 'Amber pebble',    t: 'Rounded smooth, warm to hold.' },
+    { d: 550,  n: 'Trilobite',       t: 'Curled up, about two fingers wide.' },
+    { d: 700,  n: 'Quartz pocket',   t: 'A seam of small clear crystals.' },
+    { d: 1000, n: 'Garnet',          t: 'Dark red crystals set in the granite.' },
+    { d: 1250, n: 'Smoky quartz',    t: 'One long crystal, lying flat in the wall.' },
+    { d: 2500, n: 'Underground stream', t: 'Cold water running through a crack in the rock.' },
+    { d: 6000, n: 'Fault line',      t: 'Two rock faces, polished and scratched by old movement.' },
+    { d: 100000, n: 'Gold vein',     t: 'A thin thread of gold in white quartz.' },
+    { d: 300000, n: 'Gas pocket',    t: 'A hiss of methane. You step back.' },
+    { d: 1226200, n: 'Kola borehole', t: 'The deepest hole people have ever drilled stopped here, at 12 km.' },
+    { d: 15000000, n: 'Diamond',     t: 'Rough and still growing, under enormous pressure.' },
+    { d: 60000000, n: 'Ringwoodite', t: 'A mineral that holds water inside its crystals.' },
+    { d: 300000000, n: 'Liquid iron', t: 'Flowing metal, the source of the planet\'s magnetic field.' },
+    { d: 637100000, n: 'Centre of the Earth', t: 'Every direction is up.' }
+  ];
+  FINDS.forEach(function (f) { f.need = Math.ceil((f.d * 10) / MM_PER_SHOVEL); });
+  LAYERS.forEach(function (L) { L.need = Math.ceil((L.from * 10) / MM_PER_SHOVEL); });
+
+  /* ---------- storage ---------- */
+  var LS_N = 'slowdig.shovels';
+  function lget(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lset(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function ldel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  var $ = function (id) { return document.getElementById(id); };
+  var el = {
+    top: $('top'), prof: $('prof'), digBtn: $('digBtn'),
+    status: $('status'), statusText: $('statusText'),
+    depth: $('depth'), depthUnit: $('depthUnit'), depthSub: $('depthSub'),
+    sShovels: $('sShovels'), sSoil: $('sSoil'), sLayer: $('sLayer'), sTemp: $('sTemp'), sFind: $('sFind'), sNext: $('sNext'),
+    finds: $('finds'), noFinds: $('noFinds'), saveNote: $('saveNote'),
+    resetArea: $('resetArea'), resetBtn: $('resetBtn'), resetConfirm: $('resetConfirm'),
+    resetYes: $('resetYes'), resetNo: $('resetNo'),
+    codeOut: $('codeOut'), codeIn: $('codeIn'), copyBtn: $('copyBtn'), loadBtn: $('loadBtn'),
+    loadConfirm: $('loadConfirm'), loadConfirmText: $('loadConfirmText'), loadYes: $('loadYes'), loadNo: $('loadNo'), codeMsg: $('codeMsg')
+  };
+
+  /* ---------- state ---------- */
+  var shovels = parseInt(lget(LS_N) || '', 10) || 0;   // truth
+  var shownShovels = shovels;                           // what the panel shows
+  var shownF = shovels;                                 // smoothed, drives the drawings
+  var tween = null;
+  var anim = null;
+  var glints = [];
+  var parts = [];
+  var mouse = null;
+  var docRef = null, dbOk = false, localOk = true;
+  var dirty = true, bgDirty = true;
+
+  function depthCm(n) { return Math.min(DEPTH_MAX_CM, (n * MM_PER_SHOVEL) / 10); }
+  function layerAt(d) {
+    for (var i = LAYERS.length - 1; i >= 0; i--) if (d >= LAYERS[i].from) return LAYERS[i];
+    return LAYERS[0];
+  }
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  function tz(s) { return s.indexOf('.') >= 0 ? s.replace(/\.?0+$/, '') : s; }
+  function cmLabel(cm) {
+    if (cm < 100) return tz(cm.toFixed(cm < 10 ? 1 : 0)) + ' cm';
+    var m = cm / 100;
+    if (m < 1000) return tz(m.toFixed(m < 10 ? 2 : (m < 100 ? 1 : 0))) + ' m';
+    var km = m / 1000;
+    if (km >= 100) return Math.round(km).toLocaleString() + ' km';
+    return tz(km.toFixed(km < 10 ? 2 : 1)) + ' km';
+  }
+  function depthParts(cm) {
+    if (cm < 100) return [cm.toFixed(1), 'cm'];
+    var m = cm / 100;
+    if (m < 1000) return [m.toFixed(2), 'm'];
+    var km = m / 1000;
+    return [km < 100 ? km.toFixed(3) : km.toLocaleString(undefined, { maximumFractionDigits: 2 }), 'km'];
+  }
+  function niceStep(minCm) {
+    var p = Math.pow(10, Math.floor(Math.log(minCm) / Math.LN10));
+    var ms = [1, 2, 5, 10];
+    for (var q = 0; q < ms.length; q++) if (ms[q] * p >= minCm) return ms[q] * p;
+    return 10 * p;
+  }
+  function fmtCount(n) {
+    if (n < 1e6) return Math.round(n).toLocaleString();
+    if (n < 1e9) return (n / 1e6).toFixed(n < 1e7 ? 2 : 1) + ' million';
+    return (n / 1e9).toFixed(2) + ' billion';
+  }
+  function soilLabel(n) {
+    var l = n * LITRES_PER_SHOVEL;
+    if (l < 1000) return l + ' L';
+    var m3 = l / 1000;
+    if (m3 < 1000) return m3.toFixed(2) + ' m³';
+    return Math.round(m3).toLocaleString() + ' m³';
+  }
+  var TEMPS = [[0, 15], [35, 600], [100, 1300], [410, 1600], [660, 1800], [2891, 3700], [5150, 5000], [6371, 5400]];
+  function tempLabel(cm) {
+    var km = cm / 100000, t = TEMPS[TEMPS.length - 1][1];
+    for (var q = 1; q < TEMPS.length; q++) {
+      if (km <= TEMPS[q][0]) {
+        var a = TEMPS[q - 1], b = TEMPS[q];
+        t = a[1] + (b[1] - a[1]) * ((km - a[0]) / (b[0] - a[0]));
+        break;
+      }
+    }
+    return Math.round(t).toLocaleString() + ' °C';
+  }
+
+  /* ---------- tokens ---------- */
+  var T = {};
+  var TOKENS = ['--accent', '--sky', '--ink', '--ground', '--s-top', '--s-sub', '--s-clay', '--s-gravel', '--s-sand', '--s-granite',
+    '--hole', '--on-soil', '--speck-lt', '--speck-dk', '--grass', '--blade-lt', '--blade-dk', '--wood', '--metal', '--f-mono',
+    '--s-lowcrust', '--s-mantle', '--s-trans', '--s-lowmantle', '--s-outer', '--s-inner'];
+  function readTokens() {
+    var css = getComputedStyle(document.documentElement), changed = false;
+    TOKENS.forEach(function (n) {
+      var v = css.getPropertyValue(n).trim();
+      if (T[n] !== v) { T[n] = v; changed = true; }
+    });
+    return changed;
+  }
+  var rgbCache = {};
+  function rgb(h) {
+    if (rgbCache[h]) return rgbCache[h];
+    var m = /^#?([0-9a-f]{6})$/i.exec(h);
+    var n = m ? parseInt(m[1], 16) : 0x808080;
+    return (rgbCache[h] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]);
+  }
+  function shade(h, a) {
+    var c = rgb(h);
+    return 'rgb(' + Math.round(c[0] * (1 - a)) + ',' + Math.round(c[1] * (1 - a)) + ',' + Math.round(c[2] * (1 - a)) + ')';
+  }
+  function tint(h, f) {
+    var c = rgb(h);
+    return 'rgb(' + Math.min(255, Math.round(c[0] * f)) + ',' + Math.min(255, Math.round(c[1] * f)) + ',' + Math.min(255, Math.round(c[2] * f)) + ')';
+  }
+
+  /* ---------- seeded texture ---------- */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  var rnd = mulberry32(20261022);
+  var BLADES = [], RING_SPECKS = [], FLOOR_SPECKS = [], BAND_SPECKS = [], HEAP_U = [], CLODS = [];
+  var HEAP_N = 44, HEAP_ROT = 0.3, HC = Math.cos(HEAP_ROT), HS = Math.sin(HEAP_ROT);
+  var i;
+  for (i = 0; i < 900; i++) BLADES.push({ x: rnd(), y: rnd(), a: rnd() * Math.PI, l: 3 + rnd() * 4, lt: rnd() < 0.55 });
+  for (i = 0; i < 260; i++) RING_SPECKS.push({ x: rnd(), y: rnd(), r: 0.8 + rnd() * 1.6, lt: rnd() < 0.5, a: 0.12 + rnd() * 0.22 });
+  for (i = 0; i < 460; i++) FLOOR_SPECKS.push({ x: rnd(), y: rnd(), r: 0.8 + rnd() * 1.8, lt: rnd() < 0.5, a: 0.12 + rnd() * 0.26 });
+  for (i = 0; i < 500; i++) BAND_SPECKS.push({ x: rnd(), y: rnd(), r: 0.8 + rnd() * 1.6, lt: rnd() < 0.5, a: 0.12 + rnd() * 0.22 });
+  var hp1 = rnd() * 6.28, hp2 = rnd() * 6.28, hp3 = rnd() * 6.28;
+  for (i = 0; i < HEAP_N; i++) {
+    var ha = (i / HEAP_N) * Math.PI * 2;
+    var dA = Math.atan2(Math.sin(ha - Math.PI), Math.cos(ha - Math.PI));
+    var tail = 0.22 * Math.exp(-(dA * dA) / 0.45);     // soil thrown toward the pit forms a lobe
+    HEAP_U.push(1 + 0.17 * Math.sin(2 * ha + hp1) + 0.1 * Math.sin(3 * ha + hp2) + 0.07 * Math.sin(5 * ha + hp3) + tail + (rnd() - 0.5) * 0.12);
+  }
+  for (i = 0; i < 420; i++) {
+    var poly = [];
+    for (var pq = 0; pq < 6; pq++) poly.push(0.65 + rnd() * 0.6);
+    CLODS.push({ a: rnd() * Math.PI * 2, rr: rnd(), sz: 3 + rnd() * 7, poly: poly, tone: 0.82 + rnd() * 0.38, rot: rnd() * 6.28 });
+  }
+
+  /* ---------- canvases ---------- */
+  function Surface(canvas) {
+    this.c = canvas; this.ctx = canvas.getContext('2d'); this.w = 400; this.h = 300; this.dpr = 1;
+  }
+  Surface.prototype.size = function () {
+    var r = this.c.getBoundingClientRect();
+    this.w = Math.max(160, Math.round(r.width));
+    this.h = Math.max(160, Math.round(r.height));
+    this.dpr = Math.min(3, window.devicePixelRatio || 1);
+    this.c.width = Math.round(this.w * this.dpr);
+    this.c.height = Math.round(this.h * this.dpr);
+  };
+  var topS = new Surface(el.top), profS = new Surface(el.prof);
+  var bg = document.createElement('canvas');
+  var G = { x: 0, y: 0, P: 200, m: 12, hx: 300, hy: 150, hr: 60 };
+
+  function layout() {
+    var W = topS.w, H = topS.h;
+    G.P = Math.round(Math.min(H * 0.64, W * 0.5));
+    G.m = Math.round(G.P * 0.06);
+    G.x = Math.round(W * 0.37 - G.P / 2);
+    G.y = Math.round((H - G.P) / 2 - H * 0.02);
+    var right = G.x + G.P;
+    G.hx = right + (W - right) / 2;
+    G.hy = Math.round(H * 0.5);
+    G.hr = Math.max(20, (W - right) / 2 - 8);
+  }
+
+  function resizeAll() {
+    topS.size(); profS.size();
+    layout();
+    bgDirty = true; dirty = true;
+  }
+  if (window.ResizeObserver) {
+    var ro = new ResizeObserver(resizeAll);
+    ro.observe(el.top); ro.observe(el.prof);
+  } else window.addEventListener('resize', resizeAll);
+
+  function speck(ctx, x, y, s, lt, dk, alpha) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = s.lt ? lt : dk;
+    ctx.fillRect(x, y, s.r, s.r);
+  }
+
+  /* static ground: grass, bare ring, stakes and string, scale bar */
+  function buildBg() {
+    var W = topS.w, H = topS.h, d = topS.dpr;
+    bg.width = Math.round(W * d); bg.height = Math.round(H * d);
+    var c = bg.getContext('2d');
+    c.setTransform(d, 0, 0, d, 0, 0);
+    c.fillStyle = T['--grass'];
+    c.fillRect(0, 0, W, H);
+    c.lineWidth = 1;
+    BLADES.forEach(function (b) {
+      var x = b.x * W, y = b.y * H;
+      c.strokeStyle = b.lt ? T['--blade-lt'] : T['--blade-dk'];
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(b.a) * b.l, y + Math.sin(b.a) * b.l); c.stroke();
+    });
+    var m = G.m, rx = G.x - m, ry = G.y - m, rs = G.P + 2 * m;
+    c.fillStyle = T['--s-top'];
+    c.fillRect(rx, ry, rs, rs);
+    RING_SPECKS.forEach(function (s) { speck(c, rx + s.x * rs, ry + s.y * rs, s, T['--speck-lt'], T['--speck-dk'], s.a); });
+    c.globalAlpha = 1;
+    // string and corner stakes
+    c.strokeStyle = T['--accent']; c.lineWidth = 1.5;
+    c.strokeRect(rx + 0.5, ry + 0.5, rs - 1, rs - 1);
+    c.fillStyle = T['--accent'];
+    [[rx, ry], [rx + rs, ry], [rx, ry + rs], [rx + rs, ry + rs]].forEach(function (p) {
+      c.fillRect(p[0] - 4, p[1] - 4, 8, 8);
+      c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 1; c.strokeRect(p[0] - 3.5, p[1] - 3.5, 7, 7);
+    });
+    // scale bar
+    var ly = ry + rs + 14;
+    c.strokeStyle = T['--on-soil']; c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(G.x, ly); c.lineTo(G.x + G.P, ly);
+    c.moveTo(G.x, ly - 4); c.lineTo(G.x, ly + 4);
+    c.moveTo(G.x + G.P, ly - 4); c.lineTo(G.x + G.P, ly + 4);
+    c.stroke();
+    c.fillStyle = T['--on-soil'];
+    c.font = '500 11px ' + T['--f-mono'];
+    c.textAlign = 'center'; c.textBaseline = 'top';
+    c.fillText('1 m', G.x + G.P / 2, ly + 6);
+    bgDirty = false;
+  }
+
+  /* ---------- top-down view ---------- */
+  // The heap is built from the shovelfuls themselves: lumpy outline, individual clods
+  // coloured by the layer each one came from, and loose crumbs thrown around the edge.
+  function heapPt(px, py) {
+    var x = px * 1.12, y = py * 0.9;
+    return [G.hx + x * HC - y * HS, G.hy + x * HS + y * HC];
+  }
+  function heapPath(ctx, R, dx, dy) {
+    var pts = [], n = HEAP_N, j;
+    for (j = 0; j < n; j++) {
+      var a = (j / n) * Math.PI * 2;
+      var p = heapPt(Math.cos(a) * HEAP_U[j] * R, Math.sin(a) * HEAP_U[j] * R);
+      pts.push([p[0] + dx, p[1] + dy]);
+    }
+    ctx.beginPath();
+    ctx.moveTo((pts[n - 1][0] + pts[0][0]) / 2, (pts[n - 1][1] + pts[0][1]) / 2);
+    for (j = 0; j < n; j++) {
+      var q = pts[(j + 1) % n];
+      ctx.quadraticCurveTo(pts[j][0], pts[j][1], (pts[j][0] + q[0]) / 2, (pts[j][1] + q[1]) / 2);
+    }
+    ctx.closePath();
+  }
+  function drawHeap(ctx, R) {
+    if (R < 2) return;
+    var n = shownF;
+    var K = Math.min(CLODS.length, Math.max(1, Math.round(n)));
+    heapPath(ctx, R, R * 0.12, R * 0.16);
+    ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
+    heapPath(ctx, R, 0, 0);
+    ctx.fillStyle = shade(T[layerAt(depthCm(n / 2)).c], 0.12); ctx.fill();
+
+    var span = Math.max(0, n - 1), k, c, L, idx, uu, ro, pp, sz, q, ang, rr;
+    for (k = 0; k < K; k++) {
+      c = CLODS[k];
+      var frac = K > 1 ? k / (K - 1) : 0.5;
+      L = layerAt(depthCm(frac * span));
+      idx = Math.floor((c.a / (Math.PI * 2)) * HEAP_N) % HEAP_N;
+      uu = HEAP_U[idx];
+      ro = Math.sqrt(1 - frac * 0.95) * (0.3 + 0.75 * c.rr) * 0.92 * uu;
+      pp = heapPt(Math.cos(c.a) * ro * R, Math.sin(c.a) * ro * R);
+      sz = clamp(c.sz * (R / 70), 2, 12);
+      ctx.fillStyle = tint(T[L.c], c.tone);
+      ctx.beginPath();
+      for (q = 0; q < 6; q++) {
+        ang = c.rot + (q / 6) * Math.PI * 2;
+        rr = sz * c.poly[q];
+        if (q === 0) ctx.moveTo(pp[0] + Math.cos(ang) * rr, pp[1] + Math.sin(ang) * rr * 0.8);
+        else ctx.lineTo(pp[0] + Math.cos(ang) * rr, pp[1] + Math.sin(ang) * rr * 0.8);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+
+    // loose crumbs around the foot of the heap
+    var crumbs = Math.min(70, 6 + Math.floor(K / 6));
+    for (k = 0; k < crumbs; k++) {
+      c = CLODS[(k * 7) % CLODS.length];
+      idx = Math.floor((c.a / (Math.PI * 2)) * HEAP_N) % HEAP_N;
+      pp = heapPt(Math.cos(c.a) * R * (0.98 + 0.5 * c.rr) * HEAP_U[idx], Math.sin(c.a) * R * (0.98 + 0.5 * c.rr) * HEAP_U[idx]);
+      L = layerAt(depthCm(c.rr * span));
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = tint(T[L.c], c.tone);
+      ctx.fillRect(pp[0], pp[1], 1 + c.rr * 1.6, 1 + c.rr * 1.3);
+    }
+    ctx.globalAlpha = 1;
+
+    // soft light from the top left, shade at the bottom right
+    ctx.save();
+    heapPath(ctx, R, 0, 0);
+    ctx.clip();
+    var g = ctx.createRadialGradient(G.hx - R * 0.3, G.hy - R * 0.32, R * 0.08, G.hx, G.hy, R * 1.3);
+    g.addColorStop(0, 'rgba(255,255,255,0.16)');
+    g.addColorStop(0.55, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.30)');
+    ctx.fillStyle = g;
+    ctx.fillRect(G.hx - R * 1.7, G.hy - R * 1.7, R * 3.4, R * 3.4);
+    ctx.restore();
+  }
+
+  function drawPit(ctx, depth, t) {
+    var x = G.x, y = G.y, P = G.P;
+    var ww = Math.min(P * 0.2, 3 * Math.sqrt(depth * 4));
+    var dark = 0.55 * (1 - Math.exp(-depth / 120));
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, P, P); ctx.clip();
+    // deep holes bunch the shallow layers into the outer rings so each one stays visible
+    var pw = 1 + Math.min(4, Math.max(0, (Math.log(depth / 100) / Math.LN10) * 0.8));
+    var N = ww > 0.5 ? 34 : 0;
+    for (var s = 0; s < N; s++) {
+      var u = s / N;
+      var L = layerAt(depth * Math.pow(u, pw));
+      var inset = ww * u;
+      ctx.fillStyle = shade(T[L.c], dark * u * (L.glow ? 0.25 : 1));
+      ctx.fillRect(x + inset, y + inset, P - 2 * inset, P - 2 * inset);
+    }
+    var fl = layerAt(depth);
+    ctx.fillStyle = shade(T[fl.c], fl.glow ? dark * 0.25 : dark);
+    ctx.fillRect(x + ww, y + ww, P - 2 * ww, P - 2 * ww);
+    // floor texture
+    var fx = x + ww, fy = y + ww, fs = P - 2 * ww;
+    var gravel = fl.n === 'Gravel';
+    var lt = T['--speck-lt'], dk = T['--speck-dk'];
+    for (var q = 0; q < FLOOR_SPECKS.length; q++) {
+      var sp = FLOOR_SPECKS[q];
+      if (gravel && q < 140) {
+        ctx.globalAlpha = 0.42;
+        ctx.fillStyle = sp.lt ? lt : T['--s-gravel'];
+        ctx.beginPath(); ctx.arc(fx + sp.x * fs, fy + sp.y * fs, sp.r * 2.4, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.3; ctx.strokeStyle = dk; ctx.lineWidth = 1; ctx.stroke();
+      } else {
+        speck(ctx, fx + sp.x * fs, fy + sp.y * fs, sp, lt, dk, sp.a * (1 - dark * 0.6));
+      }
+    }
+    ctx.globalAlpha = 1;
+    // corner edges of the walls
+    if (ww > 0.5) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y); ctx.lineTo(fx, fy);
+      ctx.moveTo(x + P, y); ctx.lineTo(fx + fs, fy);
+      ctx.moveTo(x, y + P); ctx.lineTo(fx, fy + fs);
+      ctx.moveTo(x + P, y + P); ctx.lineTo(fx + fs, fy + fs);
+      ctx.stroke();
+      var vg = ctx.createRadialGradient(x + P / 2, y + P / 2, P * 0.2, x + P / 2, y + P / 2, P * 0.75);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,' + (0.1 + dark * 0.5).toFixed(3) + ')');
+      ctx.fillStyle = vg; ctx.fillRect(x, y, P, P);
+    }
+    // fresh spade mark
+    if (anim && t < 0.62) {
+      ctx.globalAlpha = 0.4 * (1 - t / 0.62);
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(anim.x, anim.y, P * 0.07, P * 0.045, 0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    ctx.strokeStyle = T['--ground']; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 0.5, y - 0.5, P + 1, P + 1);
+  }
+
+  function drawShovel(ctx, mx, my, thrust, alpha) {
+    var P = G.P;
+    var w = P * 0.15, bl = P * 0.2, hl = P * 0.5;
+    var ang = -0.9;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    // shadow
+    ctx.translate(mx + 5, my + 7); ctx.rotate(ang);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, -3, bl + hl, 6);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(mx, my); ctx.rotate(ang);
+    ctx.translate(thrust * -7, 0);
+    ctx.fillStyle = T['--wood'];
+    ctx.fillRect(bl - 2, -2.5, hl, 5);
+    ctx.fillStyle = T['--metal'];
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(bl * 0.25, -w * 0.5, bl * 0.55, -w / 2);
+    ctx.lineTo(bl, -w * 0.16);
+    ctx.lineTo(bl, w * 0.16);
+    ctx.lineTo(bl * 0.55, w / 2);
+    ctx.quadraticCurveTo(bl * 0.25, w * 0.5, 0, 0);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bl * 0.2, 0); ctx.lineTo(bl * 0.9, 0);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTop(now) {
+    var ctx = topS.ctx, W = topS.w, H = topS.h;
+    if (bgDirty) buildBg();
+    ctx.setTransform(topS.dpr, 0, 0, topS.dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(bg, 0, 0, W, H);
+
+    var depth = depthCm(shownF);
+    var t = anim ? (now - anim.t0) / DIG_MS : 1;
+    var R = shownF > 0 ? Math.min(G.hr / 1.45, 5 + Math.sqrt(shownF) * 4.2) : 0;
+
+    drawHeap(ctx, R);
+    drawPit(ctx, depth, t);
+
+    if (anim && t >= 0.22 && t < 0.62 && !REDUCED) {
+      var e = ease((t - 0.22) / 0.4);
+      var cxp = lerp(anim.x, G.hx, e);
+      var cyp = lerp(anim.y, G.hy, e) - Math.sin(Math.PI * e) * H * 0.14;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath(); ctx.ellipse(lerp(anim.x, G.hx, e) + 4, lerp(anim.y, G.hy, e) + 8, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = T[anim.cvar];
+      ctx.beginPath(); ctx.arc(cxp, cyp, 8 - e * 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.beginPath(); ctx.arc(cxp - 2, cyp - 2, 3, 0, Math.PI * 2); ctx.fill();
+    }
+
+    parts.forEach(function (p) {
+      var a = (now - p.t0) / p.life;
+      if (a >= 1) return;
+      ctx.globalAlpha = 1 - a;
+      ctx.fillStyle = T[p.cvar];
+      ctx.fillRect(p.x + p.vx * a * 30, p.y + p.vy * a * 30 + a * a * 18, 2.5, 2.5);
+    });
+    ctx.globalAlpha = 1;
+
+    glints.forEach(function (g) {
+      var a = (now - g.t0) / 2000;
+      if (a >= 1) return;
+      var ra = Math.min(1, a * 2.2);
+      ctx.globalAlpha = 1 - ra;
+      ctx.strokeStyle = T['--accent']; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(g.x, g.y, 6 + ra * 36, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = a < 0.8 ? 1 : 1 - (a - 0.8) / 0.2;
+      ctx.fillStyle = T['--accent'];
+      ctx.beginPath(); ctx.moveTo(g.x, g.y - 7); ctx.lineTo(g.x + 7, g.y); ctx.lineTo(g.x, g.y + 7); ctx.lineTo(g.x - 7, g.y); ctx.closePath(); ctx.fill();
+      ctx.font = '500 12px ' + T['--f-mono'];
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+      var ty = g.y - 14 - a * 6;
+      ctx.strokeText(g.name, clamp(g.x, 50, W - 50), ty);
+      ctx.fillStyle = T['--on-soil'];
+      ctx.fillText(g.name, clamp(g.x, 50, W - 50), ty);
+    });
+    ctx.globalAlpha = 1;
+
+    // shovel follows the pointer; it thrusts during the first part of a dig
+    var sx, sy;
+    if (anim && t < 0.62) { sx = anim.x; sy = anim.y; }
+    else if (mouse) { sx = mouse.x; sy = mouse.y; }
+    else { sx = G.x + G.P * 0.7; sy = G.y + G.P * 0.55; }
+    var thrust = 0;
+    if (anim && t < 0.3) thrust = Math.sin((t / 0.3) * Math.PI);
+    drawShovel(ctx, sx, sy, thrust, anim ? 0.9 : (mouse ? 1 : 0.8));
+
+    if (shovels === 0 && !anim) {
+      ctx.font = '500 12px ' + T['--f-mono'];
+      var msg = 'Click to dig';
+      var tw = ctx.measureText(msg).width;
+      var bx = G.x + G.P / 2, by = G.y + G.P * 0.3;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(bx - tw / 2 - 10, by - 12, tw + 20, 24);
+      ctx.fillStyle = T['--on-soil'];
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(msg, bx, by + 1);
+    }
+  }
+
+  /* ---------- cross-section sidebar ---------- */
+  function drawProf() {
+    var ctx = profS.ctx, W = profS.w, H = profS.h;
+    var depth = depthCm(shownF);
+    ctx.setTransform(profS.dpr, 0, 0, profS.dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    var y0 = Math.round(H * 0.12);
+    var range = Math.max(60, depth * 1.35);
+    var sc = (H - y0 - 24) / range;
+    var cx = Math.round(W * 0.44);
+    var hw = Math.round(Math.min(40, W * 0.13));
+    var onSoil = T['--on-soil'];
+    var flag = T['--accent'];
+
+    ctx.fillStyle = T['--sky'];
+    ctx.fillRect(0, 0, W, y0);
+
+    LAYERS.forEach(function (L, li) {
+      var top = y0 + L.from * sc;
+      if (top >= H) return;
+      var to = li + 1 < LAYERS.length ? LAYERS[li + 1].from : Infinity;
+      var bot = Math.min(H, y0 + to * sc);
+      ctx.fillStyle = T[L.c];
+      ctx.fillRect(0, top, W, bot - top);
+    });
+
+    var lt = T['--speck-lt'], dk = T['--speck-dk'];
+    LAYERS.forEach(function (L, li) {
+      var top = y0 + L.from * sc;
+      if (top >= H) return;
+      var bot = li + 1 < LAYERS.length ? Math.min(H, y0 + LAYERS[li + 1].from * sc) : H;
+      var hv = bot - top;
+      if (hv < 1) return;
+      var cnt = Math.min(BAND_SPECKS.length, Math.floor((hv * W) / 260));
+      var big = L.n === 'Gravel' ? 1.2 : 0;
+      for (var s = 0; s < cnt; s++) {
+        var sp = BAND_SPECKS[(s + li * 53) % BAND_SPECKS.length];
+        ctx.globalAlpha = sp.a;
+        ctx.fillStyle = sp.lt ? lt : dk;
+        var r = Math.max(0.7, sp.r + big);
+        ctx.fillRect(Math.round(sp.x * W), Math.round(top + sp.y * hv), r, r);
+      }
+    });
+    ctx.globalAlpha = 1;
+
+    ctx.font = '500 9px ' + T['--f-mono'];
+    ctx.textBaseline = 'middle';
+    LAYERS.forEach(function (L, li) {
+      var top = y0 + L.from * sc;
+      if (top > H - 4) return;
+      var bandBot = li + 1 < LAYERS.length ? y0 + LAYERS[li + 1].from * sc : H;
+      if (L.from > 0) { ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(0, Math.round(top), W, 1); }
+      if (top + 14 < H && Math.min(bandBot, H) - top >= 15) {
+        ctx.fillStyle = onSoil; ctx.globalAlpha = 0.85; ctx.textAlign = 'left';
+        ctx.fillText(L.n.toUpperCase(), 8, top + 12);
+        ctx.globalAlpha = 1;
+      }
+    });
+
+    ctx.fillStyle = T['--ground'];
+    ctx.fillRect(0, y0 - 1, W, 2);
+
+    // ruler on the right edge
+    var step = niceStep(34 / sc);
+    ctx.textAlign = 'right';
+    ctx.font = '400 10px ' + T['--f-mono'];
+    for (var tq = 1; tq < 60; tq++) {
+      var d = tq * step;
+      var ty = Math.round(y0 + d * sc);
+      if (ty > H - 6) break;
+      ctx.fillStyle = onSoil; ctx.globalAlpha = 0.7;
+      ctx.fillRect(W - 8, ty, 8, 1);
+      ctx.fillText(cmLabel(d), W - 12, ty);
+      ctx.globalAlpha = 1;
+    }
+
+    // spoil heap and shovel on the surface
+    if (depth > 0) {
+      var hw2 = Math.min(W * 0.28, 14 + Math.sqrt(depth) * 6);
+      var hh = Math.min(y0 - 6, 3 + Math.sqrt(depth) * 3);
+      var xr = cx - hw / 2 - 3, xl = xr - hw2 * 2;
+      ctx.fillStyle = T['--s-sub'];
+      ctx.beginPath();
+      ctx.moveTo(xl, y0);
+      ctx.quadraticCurveTo((xl + xr) / 2, y0 - hh * 1.9, xr, y0);
+      ctx.closePath(); ctx.fill();
+    }
+    var sx = cx + hw / 2 + 12;
+    ctx.strokeStyle = T['--ink']; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(sx, y0 - 3); ctx.lineTo(sx + 14, y0 - 36); ctx.stroke();
+    ctx.fillStyle = T['--ink'];
+    ctx.beginPath();
+    ctx.moveTo(sx - 5, y0 - 1); ctx.lineTo(sx + 5, y0 - 1); ctx.lineTo(sx + 3, y0 - 12); ctx.lineTo(sx - 2, y0 - 12);
+    ctx.closePath(); ctx.fill();
+
+    // the shaft
+    var hp = depth * sc;
+    if (hp > 0) {
+      ctx.fillStyle = T['--hole'];
+      ctx.fillRect(cx - hw / 2, y0, hw, hp);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(cx - hw / 2 - 2, y0, 2, hp);
+      ctx.fillRect(cx + hw / 2, y0, 2, hp);
+      ctx.fillStyle = flag;
+      ctx.fillRect(cx - hw / 2, y0 + hp - 2, hw, 2);
+
+      ctx.font = '500 11px ' + T['--f-mono'];
+      ctx.textAlign = 'right';
+      ctx.fillStyle = flag;
+      var my = y0 + hp - 1;
+      ctx.fillRect(cx - hw / 2 - 12, my, 8, 1.5);
+      ctx.fillText(cmLabel(depth), cx - hw / 2 - 16, Math.min(H - 8, my));
+    }
+
+    // finds that have been dug up
+    ctx.font = '400 10px ' + T['--f-mono'];
+    ctx.textAlign = 'left';
+    var lastFy = -100;
+    FINDS.slice().reverse().forEach(function (f) {
+      if (f.d > depth + 1e-6) return;
+      var fy = y0 + f.d * sc;
+      if (fy > H - 6) return;
+      if (Math.abs(fy - lastFy) < 12) return;
+      lastFy = fy;
+      var fx = cx + hw / 2 + 16;
+      ctx.fillStyle = flag;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 5); ctx.lineTo(fx + 5, fy); ctx.lineTo(fx, fy + 5); ctx.lineTo(fx - 5, fy);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1; ctx.stroke();
+      var room = W - 62 - (fx + 11);
+      if (room > 34) {
+        var text = f.n;
+        if (ctx.measureText(text).width > room) {
+          while (text.length > 1 && ctx.measureText(text + '…').width > room) text = text.slice(0, -1);
+          text += '…';
+        }
+        ctx.fillStyle = onSoil;
+        ctx.fillText(text, fx + 11, fy);
+      }
+    });
+  }
+
+  /* ---------- panel ---------- */
+  var lastFindCount = -1;
+  function renderFinds() {
+    var got = FINDS.filter(function (f) { return f.need <= shownShovels; });
+    if (got.length === lastFindCount) return;
+    lastFindCount = got.length;
+    el.finds.textContent = '';
+    got.slice().reverse().forEach(function (f) {
+      var li = document.createElement('li');
+      var d = document.createElement('span'); d.className = 'd'; d.textContent = cmLabel(f.d);
+      var body = document.createElement('span');
+      var n = document.createElement('span'); n.className = 'n'; n.textContent = f.n;
+      var t = document.createElement('span'); t.className = 't'; t.textContent = ' ' + f.t;
+      body.appendChild(n); body.appendChild(t);
+      var w = document.createElement('span'); w.className = 'w'; w.textContent = 'Shovelful ' + f.need;
+      li.appendChild(d); li.appendChild(body); li.appendChild(w);
+      el.finds.appendChild(li);
+    });
+    el.finds.hidden = got.length === 0;
+    el.noFinds.hidden = got.length !== 0;
+  }
+
+  function updateDepthText() {
+    var d = depthCm(shownF);
+    var parts = depthParts(d);
+    el.depth.textContent = parts[0];
+    el.depthUnit.textContent = parts[1];
+    el.depthSub.textContent = layerAt(d).n + ' · ' + (d / 100).toLocaleString(undefined, { maximumFractionDigits: 3 }) + ' m';
+  }
+
+  function updatePanel() {
+    var n = shownShovels;
+    var d = depthCm(n);
+    updateDepthText();
+    el.sShovels.textContent = n.toLocaleString();
+    el.sSoil.textContent = soilLabel(Math.min(n, DEPTH_MAX_CM * 10 / MM_PER_SHOVEL));
+    el.sLayer.textContent = layerAt(d).n;
+    el.sTemp.textContent = tempLabel(d);
+    var nf = null, nl = null, j;
+    for (j = 0; j < FINDS.length; j++) if (FINDS[j].need > n) { nf = FINDS[j]; break; }
+    for (j = 0; j < LAYERS.length; j++) if (LAYERS[j].need > n) { nl = LAYERS[j]; break; }
+    el.sFind.textContent = nf ? 'in ' + fmtCount(nf.need - n) + ((nf.need - n) === 1 ? ' shovelful' : ' shovelfuls') : 'None left';
+    el.sNext.textContent = nl ? nl.n + ' in ' + fmtCount(nl.need - n) : '—';
+    el.resetArea.hidden = n === 0;
+    el.codeOut.value = makeCode(shovels);
+    renderFinds();
+    renderSaveNote();
+  }
+
+  function setStatus(text, hit) {
+    el.statusText.textContent = text;
+    el.status.className = 'status' + (hit ? ' hit' : '');
+  }
+
+  function renderSaveNote() {
+    if (shovels === 0) { el.saveNote.textContent = ''; return; }
+    if (localOk) el.saveNote.textContent = 'Saved in this browser only. Use a save code to move it elsewhere.';
+    else el.saveNote.textContent = 'Storage is blocked here, so this hole will not be remembered.';
+  }
+
+  /* ---------- persistence ---------- */
+  var saveTimer = null, saving = false, pendingSave = false;
+  function scheduleSave() {
+    pendingSave = true;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flush, 1500);
+  }
+  async function flush() {
+    if (!docRef || saving || !pendingSave) return;
+    saving = true; pendingSave = false;
+    try { await docRef.set({ shovels: shovels }); dbOk = true; }
+    catch (e) { dbOk = false; }
+    saving = false;
+    if (pendingSave) scheduleSave();
+    renderSaveNote();
+  }
+
+  function connect() { return Promise.resolve(); }
+
+  /* ---------- digging ---------- */
+  function dig(px, py) {
+    if (anim) return;
+    var x = clamp(px, G.x + 14, G.x + G.P - 14);
+    var y = clamp(py, G.y + 14, G.y + G.P - 14);
+    var L = layerAt(depthCm(shownF));
+    var now = performance.now();
+    shovels += 1;
+    localOk = lset(LS_N, String(shovels));
+    scheduleSave();
+    anim = { t0: now, x: x, y: y, cvar: L.c, arrived: false, from: shownShovels };
+    if (!REDUCED) {
+      for (var q = 0; q < 9; q++) {
+        var a = Math.random() * Math.PI * 2;
+        parts.push({ x: x, y: y, vx: Math.cos(a) * (0.4 + Math.random()), vy: Math.sin(a) * (0.4 + Math.random()) - 0.6, t0: now, life: 450 + Math.random() * 250, cvar: L.c });
+      }
+    }
+    dirty = true;
+  }
+
+  function arrive(now) {
+    anim.arrived = true;
+    var prev = shownShovels;
+    shownShovels = shovels;
+    tween = { from: shownF, to: shovels, t0: now, dur: REDUCED ? 1 : 350 };
+    var got = FINDS.filter(function (f) { return f.need > prev && f.need <= shovels; });
+    var d = depthCm(shovels);
+    if (got.length) {
+      var names = got.map(function (f) { return f.n; }).join(', ');
+      got.forEach(function (f) { glints.push({ x: anim.x, y: anim.y, t0: now, name: f.n }); });
+      setStatus('Found: ' + names + ' at ' + cmLabel(depthCm(got[got.length - 1].need)) + '.', true);
+    } else {
+      var layerNow = layerAt(d);
+      if (layerNow !== layerAt(depthCm(prev))) setStatus('Shovelful ' + shovels.toLocaleString() + '. You have broken through into the ' + layerNow.n.toLowerCase() + '.', true);
+      else setStatus('Shovelful ' + shovels.toLocaleString() + '. ' + cmLabel(d) + ' down in the ' + layerNow.n.toLowerCase() + '.', false);
+    }
+    updatePanel();
+  }
+
+  function digCenter() {
+    dig(G.x + G.P * (0.25 + Math.random() * 0.5), G.y + G.P * (0.25 + Math.random() * 0.5));
+  }
+
+  function canvasPoint(ev) {
+    var r = el.top.getBoundingClientRect();
+    return { x: (ev.clientX - r.left) * (topS.w / r.width), y: (ev.clientY - r.top) * (topS.h / r.height) };
+  }
+  el.top.addEventListener('pointermove', function (ev) { mouse = canvasPoint(ev); dirty = true; });
+  el.top.addEventListener('pointerleave', function () { mouse = null; dirty = true; });
+  el.top.addEventListener('pointerdown', function (ev) {
+    mouse = canvasPoint(ev);
+    dig(mouse.x, mouse.y);
+  });
+  el.top.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); digCenter(); }
+  });
+  el.digBtn.addEventListener('click', digCenter);
+
+  el.resetBtn.addEventListener('click', function () { el.resetBtn.hidden = true; el.resetConfirm.hidden = false; el.resetYes.focus(); });
+  el.resetNo.addEventListener('click', function () { el.resetConfirm.hidden = true; el.resetBtn.hidden = false; el.resetBtn.focus(); });
+  el.resetYes.addEventListener('click', async function () {
+    shovels = 0; shownShovels = 0; shownF = 0; tween = null; anim = null;
+    glints = []; parts = []; lastFindCount = -1;
+    lset(LS_N, '0');
+    el.resetConfirm.hidden = true; el.resetBtn.hidden = false;
+    setStatus('Click the ground to dig a shovelful.', false);
+    updatePanel(); dirty = true;
+    clearTimeout(saveTimer); pendingSave = false;
+    if (docRef) { try { await docRef.set({ shovels: 0 }); } catch (e) {} }
+  });
+
+  /* ---------- save code: export and import ---------- */
+  function chk(s) {
+    var h = 0;
+    for (var q = 0; q < s.length; q++) h = (h * 31 + s.charCodeAt(q)) % 46656;
+    return h.toString(36).padStart(3, '0');
+  }
+  function makeCode(n) {
+    var body = 'slowdig:1:' + Math.max(0, Math.floor(n)).toString(36);
+    return body + ':' + chk(body);
+  }
+  function parseCode(text) {
+    var m = /^slowdig:1:([0-9a-z]+):([0-9a-z]{3})$/i.exec((text || '').trim());
+    if (!m) return null;
+    var body = 'slowdig:1:' + m[1].toLowerCase();
+    if (chk(body) !== m[2].toLowerCase()) return null;
+    var n = parseInt(m[1], 36);
+    if (!isFinite(n) || n < 0 || n > 1e10) return null;
+    return n;
+  }
+  var pendingImport = null;
+  function codeMessage(text, bad) {
+    el.codeMsg.textContent = text;
+    el.codeMsg.className = 'msg' + (bad ? ' bad' : '');
+  }
+  function applyImport(n) {
+    shovels = n; shownShovels = n; shownF = n; tween = null; anim = null;
+    glints = []; parts = []; lastFindCount = -1;
+    localOk = lset(LS_N, String(shovels));
+    scheduleSave();
+    setStatus('Loaded a hole with ' + n.toLocaleString() + ' shovelfuls.', false);
+    updatePanel(); dirty = true;
+    el.codeIn.value = '';
+    el.loadConfirm.hidden = true; pendingImport = null;
+    codeMessage('Loaded. You are ' + cmLabel(depthCm(n)) + ' down.', false);
+  }
+  el.copyBtn.addEventListener('click', async function () {
+    var code = makeCode(shovels);
+    try {
+      await navigator.clipboard.writeText(code);
+      codeMessage('Copied to the clipboard.', false);
+    } catch (e) {
+      el.codeOut.focus(); el.codeOut.select();
+      codeMessage('Select the code and copy it with Ctrl+C or Cmd+C.', false);
+    }
+  });
+  el.loadBtn.addEventListener('click', function () {
+    el.loadConfirm.hidden = true; pendingImport = null;
+    var n = parseCode(el.codeIn.value);
+    if (n === null) { codeMessage('That code does not look right. Copy the whole thing, starting with slowdig.', true); return; }
+    if (n === shovels) { codeMessage('That is the hole you already have.', false); return; }
+    if (shovels > 0) {
+      pendingImport = n;
+      el.loadConfirmText.textContent = 'Replace your current hole (' + shovels.toLocaleString() + ' shovelfuls) with one of ' + n.toLocaleString() + '?';
+      el.loadConfirm.hidden = false;
+      codeMessage('', false);
+      el.loadYes.focus();
+    } else {
+      applyImport(n);
+    }
+  });
+  el.loadYes.addEventListener('click', function () { if (pendingImport !== null) applyImport(pendingImport); });
+  el.loadNo.addEventListener('click', function () { el.loadConfirm.hidden = true; pendingImport = null; codeMessage('', false); });
+
+  document.addEventListener('visibilitychange', function () { if (document.hidden) flush(); else dirty = true; });
+  window.addEventListener('pagehide', flush);
+
+  /* ---------- loop ---------- */
+  var lastTok = 0;
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (document.hidden) return;
+    if (now - lastTok > 500) {
+      lastTok = now;
+      if (readTokens()) { bgDirty = true; dirty = true; }
+    }
+    var active = false;
+    if (anim) {
+      active = true;
+      var t = (now - anim.t0) / DIG_MS;
+      if (!anim.arrived && t >= 0.62) arrive(now);
+      if (t >= 1) anim = null;
+    }
+    if (tween) {
+      active = true;
+      var e = clamp((now - tween.t0) / tween.dur, 0, 1);
+      shownF = lerp(tween.from, tween.to, ease(e));
+      updateDepthText();
+      if (e >= 1) { shownF = tween.to; tween = null; updateDepthText(); }
+    }
+    if (parts.length) { active = true; parts = parts.filter(function (p) { return now - p.t0 < p.life; }); }
+    if (glints.length) { active = true; glints = glints.filter(function (g) { return now - g.t0 < 2000; }); }
+    if (active || dirty) {
+      drawTop(now);
+      drawProf();
+      dirty = false;
+    }
+  }
+
+  /* ---------- start ---------- */
+  readTokens();
+  resizeAll();
+  updatePanel();
+  requestAnimationFrame(frame);
+  connect().then(function () {
+    lastFindCount = -1;
+    updatePanel();
+    dirty = true;
+  });
+})();
+</script>
+</body>
+</html>
